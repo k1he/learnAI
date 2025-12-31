@@ -1,0 +1,91 @@
+openapi: 3.0.3
+info:
+  title: Concept Canvas API
+  version: 1.0.0
+  description: API for generating visual explanations from natural language prompts.
+servers:
+  - url: http://localhost:8000
+    description: Local Development Server
+
+paths:
+  /api/generate:
+    post:
+      summary: Generate visual explanation
+      description: Accepts a prompt and returns a React component code with textual explanation.
+      operationId: generate_explanation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationRequest'
+      responses:
+        '200':
+          description: Successful generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server or LLM error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    GenerationRequest:
+      type: object
+      required:
+        - prompt
+      properties:
+        prompt:
+          type: string
+          minLength: 2
+          maxLength: 1000
+          example: "Show me a normal distribution"
+        model:
+          type: string
+          default: "deepseek-chat"
+          description: Optional model selection
+
+    GenerationResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+        data:
+          $ref: '#/components/schemas/GeneratedContent'
+        error:
+          type: string
+
+    GeneratedContent:
+      type: object
+      required:
+        - explanation
+        - code
+      properties:
+        explanation:
+          type: string
+          description: Markdown explanation text
+        code:
+          type: string
+          description: React component code string
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string

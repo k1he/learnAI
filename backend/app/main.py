@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.api.v1.generate import router as generate_router
 
 def create_application() -> FastAPI:
     application = FastAPI(
@@ -11,14 +12,20 @@ def create_application() -> FastAPI:
     )
 
     # Set all CORS enabled origins
-    if settings.BACKEND_CORS_ORIGINS:
-        application.add_middleware(
-            CORSMiddleware,
-            allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.BACKEND_CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+    # Register API routers
+    application.include_router(
+        generate_router,
+        prefix=settings.API_V1_STR,
+        tags=["generation"]
+    )
 
     return application
 

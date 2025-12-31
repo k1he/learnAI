@@ -31,7 +31,7 @@ mmcp/
 │   │   ├── components/     # Shadcn UI + 自定义组件
 │   │   ├── lib/            # 工具函数
 │   │   └── services/       # API 请求封装
-├── backend/                # Python 3.10+ / FastAPI
+├── backend/                # Python 3.12 / FastAPI
 │   ├── app/
 │   │   ├── main.py         # 入口
 │   │   ├── api/            # 路由
@@ -51,7 +51,7 @@ mmcp/
 
 ### 2.3 后端 (Backend)
 - **框架**: FastAPI (高性能异步 Web 框架).
-- **语言**: Python 3.10+.
+- **语言**: Python 3.12.
 - **LLM 交互**: OpenAI SDK (兼容层，对接 DeepSeek / Qwen 等国内模型).
 - **数据验证**: Pydantic.
 - **部署**: Uvicorn / Docker (可选).
