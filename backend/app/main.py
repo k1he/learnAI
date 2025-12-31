@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.generate import router as generate_router
+from app.api.v1.endpoints.chat import router as chat_router
 
 def create_application() -> FastAPI:
     application = FastAPI(
@@ -25,6 +26,13 @@ def create_application() -> FastAPI:
         generate_router,
         prefix=settings.API_V1_STR,
         tags=["generation"]
+    )
+    
+    # Register chat router for conversational mode
+    application.include_router(
+        chat_router,
+        prefix=f"{settings.API_V1_STR}/chat",
+        tags=["chat"]
     )
 
     return application

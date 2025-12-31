@@ -1,0 +1,65 @@
+openapi: 3.0.0
+info:
+  title: Concept Canvas API
+  version: 1.0.0
+  description: API for Generative Explorable Explanations
+paths:
+  /api/v1/chat/generate:
+    post:
+      summary: Generate or Modify Visualization
+      description: Accepts conversation history and returns updated visualization code and explanation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, assistant, system]
+                      content:
+                        type: string
+                current_code:
+                  type: string
+                  description: The current React code state (if modifying).
+                  nullable: true
+                model:
+                  type: string
+                  default: deepseek-chat
+      responses:
+        '200':
+          description: Successful generation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        example: assistant
+                      content:
+                        type: string
+                        description: Explanation text
+                      code:
+                        type: string
+                        description: The generated/modified React code
+                  usage:
+                    type: object
+                    properties:
+                      prompt_tokens:
+                        type: integer
+                      completion_tokens:
+                        type: integer
+        '400':
+          description: Bad Request (e.g. invalid code generated)
+        '422':
+          description: Validation Error (AST check failed)
