@@ -7,7 +7,10 @@
     "build": "node scripts/build-runtime.mjs && next build",
     "build:runtime": "node scripts/build-runtime.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
@@ -31,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.17",
     "esbuild": "^0.27.2",
     "eslint": "^9",
