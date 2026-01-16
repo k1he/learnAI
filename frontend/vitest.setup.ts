@@ -1,11 +1,15 @@
 import '@testing-library/jest-dom/vitest'
-import { afterEach } from 'vitest'
+import { afterAll, afterEach, beforeAll } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { server } from './__tests__/mocks/server'
 
-// 每个测试后清理 React 组件
+// 启动 MSW
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
   cleanup()
+  server.resetHandlers()
 })
+afterAll(() => server.close())
 
 // Mock localStorage
 const localStorageMock = (() => {
