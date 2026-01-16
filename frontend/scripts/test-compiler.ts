@@ -73,6 +73,39 @@ export default function Counter() {
   );
 }`,
   },
+  {
+    name: '不支持的库：recharts（应该失败）',
+    code: `import { LineChart, Line, ResponsiveContainer } from 'recharts';
+
+export default function Chart() {
+  const data = [
+    { name: 'A', value: 100 },
+    { name: 'B', value: 200 },
+  ];
+
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <LineChart data={data}>
+        <Line type="monotone" dataKey="value" stroke="#8884d8" />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}`,
+    shouldFail: true,
+  },
+  {
+    name: '不支持的库：recharts（无 import，应该失败）',
+    code: `export default function Chart() {
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <LineChart data={[]}>
+        <Line dataKey="value" />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}`,
+    shouldFail: true,
+  },
 ];
 
 console.log('=== 编译器测试 ===\n');
@@ -86,31 +119,47 @@ for (const testCase of testCases) {
 
   const result = compileCode(testCase.code);
 
-  if (result.success) {
-    console.log('✓ 编译成功');
-
-    // 检查生成的代码是否包含关键部分
-    const checks = [
-      { name: 'IIFE 包装', check: result.code?.includes('(function()') },
-      { name: 'React 引用', check: result.code?.includes('const React = window.React') },
-      { name: 'ReactDOM 引用', check: result.code?.includes('const ReactDOM = window.ReactDOM') },
-      { name: '组件渲染', check: result.code?.includes('ReactDOM.createRoot') },
-      { name: '无 import 语句', check: !result.code?.includes('import ') },
-    ];
-
-    for (const c of checks) {
-      if (c.check) {
-        console.log(`  ✓ ${c.name}`);
-      } else {
-        console.log(`  ✗ ${c.name}`);
-        failed++;
+  if (testCase.shouldFail) {
+    // 期望失败的测试用例
+    if (!result.success) {
+      console.log('✓ 正确拒绝了不支持的代码');
+      console.log(`  错误信息: ${result.error}`);
+      if (result.unsupportedLibraries) {
+        console.log(`  检测到的库: ${result.unsupportedLibraries.join(', ')}`);
       }
+      passed++;
+    } else {
+      console.log('✗ 错误：应该失败但成功了');
+      failed++;
     }
-
-    passed++;
   } else {
-    console.log(`✗ 编译失败: ${result.error}`);
-    failed++;
+    // 期望成功的测试用例
+    if (result.success) {
+      console.log('✓ 编译成功');
+
+      // 检查生成的代码是否包含关键部分
+      const checks = [
+        { name: 'IIFE 包装', check: result.code?.includes('(function()') },
+        { name: 'React 引用', check: result.code?.includes('const React = window.React') },
+        { name: 'ReactDOM 引用', check: result.code?.includes('const ReactDOM = window.ReactDOM') },
+        { name: '组件渲染', check: result.code?.includes('ReactDOM.createRoot') },
+        { name: '无 import 语句', check: !result.code?.includes('import ') },
+      ];
+
+      for (const c of checks) {
+        if (c.check) {
+          console.log(`  ✓ ${c.name}`);
+        } else {
+          console.log(`  ✗ ${c.name}`);
+          failed++;
+        }
+      }
+
+      passed++;
+    } else {
+      console.log(`✗ 编译失败: ${result.error}`);
+      failed++;
+    }
   }
 
   console.log('\n');

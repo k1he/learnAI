@@ -10,6 +10,7 @@ export interface CompileResult {
   success: boolean;
   code?: string;
   error?: string;
+  unsupportedLibraries?: string[];
 }
 
 /**
@@ -20,6 +21,16 @@ export interface CompileResult {
  */
 export function compileCode(code: string): CompileResult {
   try {
+    // 检测不支持的第三方库
+    const unsupportedLibs = detectUnsupportedLibraries(code);
+    if (unsupportedLibs.length > 0) {
+      return {
+        success: false,
+        error: buildUnsupportedLibrariesError(unsupportedLibs),
+        unsupportedLibraries: unsupportedLibs,
+      };
+    }
+
     // 先从原始代码提取组件名称（在预处理之前）
     const componentName = extractComponentName(code);
 
@@ -175,4 +186,91 @@ function transformExports(code: string): string {
   result = result.replace(/export\s+/g, "");
 
   return result;
+}
+
+/**
+ * 检测代码中使用的不支持的第三方库
+ *
+ * 支持的库（运行时可用）：
+ * - react (全局可用)
+ * - react-dom (全局可用)
+ *
+ * @param code - 源代码
+ * @returns 不支持的库名称列表
+ */
+function detectUnsupportedLibraries(code: string): string[] {
+  const unsupportedLibs = new Set<string>();
+
+  // 支持的库白名单
+  const supportedLibraries = new Set([
+    'react',
+    'react-dom',
+    'react/jsx-runtime',
+    'react/jsx-dev-runtime',
+  ]);
+
+  // 正则匹配所有 import 语句
+  const importRegex = /import\s+(?:[\w\s{},*]*\s+from\s+)?['"]([^'"]+)['"]/g;
+  let match;
+
+  while ((match = importRegex.exec(code)) !== null) {
+    const libraryName = match[1];
+
+    // 跳过相对路径导入
+    if (libraryName.startsWith('.') || libraryName.startsWith('/')) {
+      continue;
+    }
+
+    // 提取包名（处理 scoped packages 和子路径）
+    const packageName = libraryName.startsWith('@')
+      ? libraryName.split('/').slice(0, 2).join('/')
+      : libraryName.split('/')[0];
+
+    if (!supportedLibraries.has(packageName) && !supportedLibraries.has(libraryName)) {
+      unsupportedLibs.add(packageName);
+    }
+  }
+
+  // 检测常见的全局引用（如直接使用 lodash、moment 等）
+  const commonLibraries = [
+    { name: 'recharts', patterns: ['ResponsiveContainer', 'LineChart', 'BarChart', 'PieChart', 'AreaChart', 'RadarChart', 'ScatterChart'] },
+    { name: 'lodash', patterns: ['_.', 'lodash'] },
+    { name: 'moment', patterns: ['moment('] },
+    { name: 'axios', patterns: ['axios.'] },
+    { name: 'd3', patterns: ['d3.'] },
+    { name: 'chart.js', patterns: ['Chart.'] },
+  ];
+
+  for (const lib of commonLibraries) {
+    if (!unsupportedLibs.has(lib.name)) {
+      for (const pattern of lib.patterns) {
+        if (code.includes(pattern)) {
+          unsupportedLibs.add(lib.name);
+          break;
+        }
+      }
+    }
+  }
+
+  return Array.from(unsupportedLibs);
+}
+
+/**
+ * 构建不支持库的友好错误消息
+ */
+function buildUnsupportedLibrariesError(libraries: string[]): string {
+  const libList = libraries.map(lib => `  - ${lib}`).join('\n');
+
+  return `检测到使用了不支持的第三方库：
+
+${libList}
+
+当前运行时仅支持 React 和 React DOM。
+
+建议：
+1. 使用纯 React 组件和 HTML/CSS 实现可视化
+2. 使用 SVG 和 Canvas API 绘制图表
+3. 避免依赖第三方图表库（如 recharts、chart.js 等）
+
+示例：可以使用 <svg> 元素和基础形状来创建自定义图表。`;
 }
