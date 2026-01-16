@@ -4,12 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build-runtime.mjs && next build",
+    "build:runtime": "node scripts/build-runtime.mjs",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
-    "@codesandbox/sandpack-react": "^2.20.0",
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -19,6 +19,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-resizable-panels": "^4.1.1",
+    "sucrase": "^3.35.1",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
@@ -26,6 +27,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.27.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
