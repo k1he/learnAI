@@ -21,13 +21,18 @@ export function VisualizerPane({
   className,
 }: VisualizerPaneProps) {
   return (
-    <div className={cn("h-full w-full", className)}>
-      <CodeRenderer
-        code={visualization?.code ?? null}
-        status={visualization?.status}
-        error={visualization?.error}
-        className="h-full"
-      />
+    <div className={cn("h-full w-full flex flex-col", className)}>
+      <div className="flex-1 min-h-0">
+        <CodeRenderer
+          code={visualization?.code ?? null}
+          status={visualization?.status}
+          error={visualization?.error}
+          className="h-full"
+        />
+      </div>
+      <div className="shrink-0 px-3 py-2 text-xs text-muted-foreground bg-muted/30 border-t text-center">
+        ⚠️ AI 生成的内容可能存在错误或幻觉，请结合其他资料进行验证
+      </div>
     </div>
   );
 }
