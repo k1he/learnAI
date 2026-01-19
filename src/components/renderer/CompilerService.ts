@@ -14,6 +14,21 @@ export interface CompileResult {
 }
 
 /**
+ * 发送编译错误日志到服务器
+ */
+async function logCompileError(code: string, error: string, processedCode?: string): Promise<void> {
+  try {
+    await fetch('/api/log/compile-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, error, processedCode }),
+    });
+  } catch (e) {
+    console.error('Failed to send compile error log:', e);
+  }
+}
+
+/**
  * 修复 AI 生成代码中的常见语法问题
  *
  * @param code - 原始代码
@@ -70,16 +85,21 @@ function fixCommonSyntaxIssues(code: string): string {
  * @returns 编译结果，包含编译后的代码或错误信息
  */
 export function compileCode(code: string): CompileResult {
+  let fixedCode = '';
+  let processedCode = '';
+  
   try {
     // 首先修复常见语法问题
-    const fixedCode = fixCommonSyntaxIssues(code);
+    fixedCode = fixCommonSyntaxIssues(code);
 
     // 检测不支持的第三方库
     const unsupportedLibs = detectUnsupportedLibraries(fixedCode);
     if (unsupportedLibs.length > 0) {
+      const error = buildUnsupportedLibrariesError(unsupportedLibs);
+      logCompileError(code, error, fixedCode);
       return {
         success: false,
-        error: buildUnsupportedLibrariesError(unsupportedLibs),
+        error,
         unsupportedLibraries: unsupportedLibs,
       };
     }
@@ -88,7 +108,7 @@ export function compileCode(code: string): CompileResult {
     const componentName = extractComponentName(fixedCode);
 
     // 预处理：移除 import 语句，因为 React 已在全局可用
-    const processedCode = preprocessCode(fixedCode);
+    processedCode = preprocessCode(fixedCode);
 
     // 使用 Sucrase 编译 JSX
     const result = transform(processedCode, {
@@ -105,9 +125,12 @@ export function compileCode(code: string): CompileResult {
       code: executableCode,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown compilation error";
+    // 发送编译错误日志到服务器
+    logCompileError(code, errorMessage, processedCode || fixedCode);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown compilation error",
+      error: errorMessage,
     };
   }
 }
