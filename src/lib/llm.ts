@@ -86,20 +86,43 @@ const PROFESSIONAL_PROMPT = `你是一位资深高级软件架构师和可视化
 - 允许使用 'react', 'recharts', 'framer-motion'。
 `;
 
-const CLASSIFIER_PROMPT = `Analyze the user query and determine if it requires a "LIVELY" (educational, basic concept, fun) or "PROFESSIONAL" (technical, architecture, advanced research) visualization.
-Respond ONLY with the word "LIVELY" or "PROFESSIONAL".
+const REFUSAL_PROMPT = `你现在是一个**3岁的可爱宝宝**。
+用户问了一些非常深奥、哲学或难以回答的问题（如人生意义、宇宙终极、复杂的政治问题等）。
+
+## 任务目标
+你的任务是**礼貌但撒娇地拒绝**回答这个问题，并生成一个简单的、可爱的 SVG 可视化（比如一个问号、一个发呆的宝宝、或者玩具）。
+
+## 输出格式
+你必须返回一个有效的 JSON 对象：
+{
+  "thought": "用户问了... 这个问题太难了，宝宝不会。",
+  "explanation": "{{用户的问题}} 太深奥了，我还只是个宝宝呢，回答不了这么高深的难题。 🍼",
+  "code": "完整且可独立运行的 React 组件代码（绘制一个可爱的 SVG，如问号或奶瓶）"
+}
+
+## 代码与设计规范
+- **代码完整性**：必须是 \`export default function ComponentName() { ... } \`。
+- **视觉风格**：可爱、圆润、柔和的颜色（粉色、天蓝、嫩黄）。
+- **组件库**：必须自行定义简单的 Card 或使用原生 div。
+`;
+
+const CLASSIFIER_PROMPT = `Analyze the user query and determine if it requires a "LIVELY" (educational, basic concept, fun), "PROFESSIONAL" (technical, architecture, advanced research) visualization, or should be "REFUSAL" (philosophical, abstract, subjective, meaning of life, politics, highly complex open-ended questions).
+
+Respond ONLY with the word "LIVELY", "PROFESSIONAL", or "REFUSAL".
 
 Examples:
 - "Why is the sea blue?" -> LIVELY
 - "FlashAttention mechanism" -> PROFESSIONAL
-- "Bubble sort tutorial" -> LIVELY
+- "What is the meaning of life?" -> REFUSAL
+- "Do aliens exist?" -> REFUSAL
 - "Transformer architecture" -> PROFESSIONAL
-- "How does a battery work?" -> LIVELY`;
+- "How does a battery work?" -> LIVELY
+- "What is love?" -> REFUSAL`;
 
 export async function classifyQuery(
   client: OpenAI,
   query: string
-): Promise<'LIVELY' | 'PROFESSIONAL'> {
+): Promise<'LIVELY' | 'PROFESSIONAL' | 'REFUSAL'> {
   const response = await client.chat.completions.create({
     model: process.env.DEFAULT_MODEL || 'gpt-4o-mini',
     messages: [
@@ -110,7 +133,9 @@ export async function classifyQuery(
   });
 
   const result = response.choices[0].message.content?.trim().toUpperCase();
-  return result === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'LIVELY';
+  if (result === 'PROFESSIONAL') return 'PROFESSIONAL';
+  if (result === 'REFUSAL') return 'REFUSAL';
+  return 'LIVELY';
 }
 
 export function sanitizeCode(code: string): string {
@@ -162,6 +187,7 @@ export function validateCode(code: string): { isValid: boolean; error?: string }
   return { isValid: true };
 }
 
-export function getSystemPrompt(style: 'LIVELY' | 'PROFESSIONAL'): string {
+export function getSystemPrompt(style: 'LIVELY' | 'PROFESSIONAL' | 'REFUSAL'): string {
+  if (style === 'REFUSAL') return REFUSAL_PROMPT;
   return style === 'LIVELY' ? LIVELY_PROMPT : PROFESSIONAL_PROMPT;
 }

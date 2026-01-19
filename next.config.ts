@@ -13,9 +13,10 @@ const nextConfig: NextConfig = {
   // 配置外部包（不进行服务端打包）
   serverExternalPackages: ["sucrase"],
 
-  // Turbopack 开发模式（更快的 HMR）
-  // 如果遇到兼容性问题可以注释掉
-  // turbopack: {},
+  // Turbopack 配置 - 设置项目根目录
+  turbopack: {
+    root: process.cwd(),
+  },
 };
 
 export default nextConfig;
