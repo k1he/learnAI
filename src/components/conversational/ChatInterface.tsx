@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRef, useEffect, useState } from "react";
 import { Send, User, Bot, Square } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types/conversation";
@@ -170,7 +171,13 @@ function MessageBubble({
               : "bg-muted text-foreground"
           )}
         >
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          {isUser ? (
+            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          ) : (
+            <div className="text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-strong:text-inherit">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
 
         {/* Code Snapshot Button */}

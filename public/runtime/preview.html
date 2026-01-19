@@ -19,11 +19,16 @@
       height: 100%;
     }
 
+    /* 让 #root 的直接子元素自动填充高度 */
+    #root > * {
+      min-height: 100%;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       line-height: 1.5;
       color: #1a1a1a;
-      background: #ffffff;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     }
 
     /* 基础工具类 - 模拟 Tailwind */
