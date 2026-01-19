@@ -14,6 +14,56 @@ export interface CompileResult {
 }
 
 /**
+ * 修复 AI 生成代码中的常见语法问题
+ *
+ * @param code - 原始代码
+ * @returns 修复后的代码
+ */
+function fixCommonSyntaxIssues(code: string): string {
+  let result = code;
+
+  // 1. 移除 import 语句中的注释（常见错误来源）
+  result = result.replace(
+    /import\s*\{([^}]*)\}\s*from/g,
+    (match, imports) => {
+      const cleanImports = imports
+        .replace(/\/\/.*$/gm, '')  // 移除单行注释
+        .replace(/\/\*[\s\S]*?\*\//g, '')  // 移除多行注释
+        .replace(/\s+/g, ' ')  // 规范化空格
+        .trim();
+      return `import { ${cleanImports} } from`;
+    }
+  );
+
+  // 2. 修复模板字符串中的问题 - 转义未闭合的反引号
+  // 这个比较复杂，简单处理：确保反引号成对
+  
+  // 3. 移除可能导致问题的 BOM 和特殊字符
+  result = result.replace(/^\uFEFF/, '');
+  
+  // 4. 修复常见的 JSX 语法问题
+  // 修复 className 中的模板字符串问题
+  result = result.replace(
+    /className=\{`([^`]*)`\s*\+\s*`([^`]*)`\}/g,
+    'className={`$1$2`}'
+  );
+
+  // 5. 修复可能的分号问题 - 在 import 后确保有分号
+  result = result.replace(
+    /(import\s+.*?from\s+['"][^'"]+['"])\s*(?!\s*;)/g,
+    '$1;'
+  );
+
+  // 6. 修复 export default 后面直接跟 const/let 的问题
+  result = result.replace(
+    /export\s+default\s+(const|let|var)\s+/g,
+    '$1 '
+  );
+
+  return result;
+}
+
+/**
  * 编译 JSX 代码为可执行的 JavaScript
  *
  * @param code - AI 生成的 JSX/TSX 源代码
@@ -21,8 +71,11 @@ export interface CompileResult {
  */
 export function compileCode(code: string): CompileResult {
   try {
+    // 首先修复常见语法问题
+    const fixedCode = fixCommonSyntaxIssues(code);
+
     // 检测不支持的第三方库
-    const unsupportedLibs = detectUnsupportedLibraries(code);
+    const unsupportedLibs = detectUnsupportedLibraries(fixedCode);
     if (unsupportedLibs.length > 0) {
       return {
         success: false,
@@ -32,10 +85,10 @@ export function compileCode(code: string): CompileResult {
     }
 
     // 先从原始代码提取组件名称（在预处理之前）
-    const componentName = extractComponentName(code);
+    const componentName = extractComponentName(fixedCode);
 
     // 预处理：移除 import 语句，因为 React 已在全局可用
-    const processedCode = preprocessCode(code);
+    const processedCode = preprocessCode(fixedCode);
 
     // 使用 Sucrase 编译 JSX
     const result = transform(processedCode, {
