@@ -160,31 +160,36 @@
   </style>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React 运行时 -->
+  
+  <!-- React + ReactDOM + Recharts + Framer Motion 运行时 (已打包在一起) -->
   <script src="/runtime/react.bundle.js"></script>
 
-  <!-- Recharts (Depends on React) -->
-  <script src="https://unpkg.com/recharts@2.12.0/umd/Recharts.min.js"></script>
-
-  <!-- Framer Motion -->
-  <script src="https://unpkg.com/framer-motion@10.18.0/dist/framer-motion.js"></script>
-
   <script>
-    // CompilerService Compatibility Layer
-    // Ensure global variables match what the compiler expects
-
-    // Framer Motion UMD exports as 'Motion', map it to 'FramerMotion'
-    if (window.Motion) {
-      window.FramerMotion = window.Motion;
+    // 运行时错误日志收集函数
+    function logRuntimeError(errorData) {
+      try {
+        fetch('/api/log/runtime-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            timestamp: new Date().toISOString(),
+            ...errorData
+          })
+        }).catch(() => {}); // 静默失败，不影响用户体验
+      } catch (e) {}
     }
 
-    // Safety check loop in case scripts load async or weirdly
-    const checkGlobals = setInterval(() => {
-      if (window.Motion && !window.FramerMotion) {
-        window.FramerMotion = window.Motion;
-      }
-    }, 50);
-    setTimeout(() => clearInterval(checkGlobals), 2000);
+    // 验证运行时是否正确加载
+    if (typeof window.React === 'undefined' || typeof window.React.createElement !== 'function') {
+      console.error('[Runtime] React not loaded correctly!');
+      logRuntimeError({ type: 'load', message: 'React not loaded correctly' });
+    }
+    if (typeof window.Recharts === 'undefined') {
+      console.warn('[Runtime] Recharts not loaded');
+    }
+    if (typeof window.FramerMotion === 'undefined') {
+      console.warn('[Runtime] FramerMotion not loaded');
+    }
   </script>
 </head>
 
@@ -194,13 +199,20 @@
   <script>
     // 全局错误处理
     window.onerror = function (message, source, lineno, colno, error) {
-      window.parent.postMessage({
-        type: 'error',
+      const errorData = {
+        type: 'runtime',
         message: message,
         stack: error ? error.stack : null,
+        source: source,
         line: lineno,
         column: colno
-      }, '*');
+      };
+      
+      // 发送到父窗口
+      window.parent.postMessage({ type: 'error', ...errorData }, '*');
+      
+      // 发送到服务器日志
+      logRuntimeError(errorData);
 
       // 显示错误 UI
       showError(message, error ? error.stack : null);
@@ -210,13 +222,15 @@
     // 未捕获的 Promise 错误
     window.onunhandledrejection = function (event) {
       const error = event.reason;
-      window.parent.postMessage({
-        type: 'error',
-        message: error.message || 'Unhandled Promise rejection',
-        stack: error.stack || null
-      }, '*');
-
-      showError(error.message, error.stack);
+      const errorData = {
+        type: 'unhandled-rejection',
+        message: error?.message || 'Unhandled Promise rejection',
+        stack: error?.stack || null
+      };
+      
+      window.parent.postMessage({ type: 'error', ...errorData }, '*');
+      logRuntimeError(errorData);
+      showError(error?.message, error?.stack);
     };
 
     // 显示错误 UI
@@ -260,11 +274,13 @@
         script.textContent = code;
         document.body.appendChild(script);
       } catch (error) {
-        window.parent.postMessage({
-          type: 'error',
+        const errorData = {
+          type: 'execute',
           message: error.message,
           stack: error.stack
-        }, '*');
+        };
+        window.parent.postMessage({ type: 'error', ...errorData }, '*');
+        logRuntimeError(errorData);
         showError(error.message, error.stack);
       }
     }

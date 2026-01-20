@@ -84,25 +84,45 @@ export function IframeRenderer({ code, onReady, onError }: IframeRendererProps) 
       return;
     }
 
-    // 编译代码
-    const result = compileCode(code);
+    // 编译代码（异步）
+    let cancelled = false;
 
-    if (!result.success) {
-      setCompileError(result.error || "Compilation failed");
-      onError?.({ message: result.error || "Compilation failed" });
-      return;
-    }
+    const compile = async () => {
+      try {
+        const result = await compileCode(code);
 
-    setCompileError(null);
+        // 如果组件已卸载，忽略结果
+        if (cancelled) return;
 
-    // 如果 iframe 还没准备好，先存起来
-    if (!isIframeReady) {
-      pendingCodeRef.current = result.code!;
-      return;
-    }
+        if (!result.success) {
+          setCompileError(result.error || "Compilation failed");
+          onError?.({ message: result.error || "Compilation failed" });
+          return;
+        }
 
-    // 注入代码
-    injectCode(result.code!);
+        setCompileError(null);
+
+        // 如果 iframe 还没准备好，先存起来
+        if (!isIframeReady) {
+          pendingCodeRef.current = result.code!;
+          return;
+        }
+
+        // 注入代码
+        injectCode(result.code!);
+      } catch (error) {
+        if (cancelled) return;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        setCompileError(errorMessage);
+        onError?.({ message: errorMessage });
+      }
+    };
+
+    compile();
+
+    return () => {
+      cancelled = true;
+    };
   }, [code, isIframeReady, injectCode, onError]);
 
   // 编译错误时显示错误界面

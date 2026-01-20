@@ -26,6 +26,7 @@ async function buildReactBundle() {
     import { createRoot } from 'react-dom/client';
     import * as Recharts from 'recharts';
     import * as FramerMotion from 'framer-motion';
+    import * as LucideIcons from 'lucide-react';
 
     // 暴露到全局
     window.React = React;
@@ -37,6 +38,7 @@ async function buildReactBundle() {
     window.FramerMotion = FramerMotion;
     window.motion = FramerMotion.motion;
     window.AnimatePresence = FramerMotion.AnimatePresence;
+    window.LucideIcons = LucideIcons;
 
     // 暴露常用 hooks
     window.useState = React.useState;

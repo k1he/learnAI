@@ -17,6 +17,13 @@
     "test:visual:update": "playwright test --project=visual --update-snapshots"
   },
   "dependencies": {
+    "@babel/core": "^7.28.6",
+    "@babel/generator": "^7.28.6",
+    "@babel/parser": "^7.28.6",
+    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-typescript": "^7.28.5",
+    "@babel/traverse": "^7.28.6",
+    "@babel/types": "^7.28.6",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/typography": "^0.5.19",
     "class-variance-authority": "^0.7.1",

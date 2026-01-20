@@ -7,6 +7,7 @@ export const ALLOWED_LIBRARIES = [
   'react/jsx-dev-runtime',
   'recharts',
   'framer-motion',
+  'lucide-react',
 ];
 
 const LIVELY_PROMPT = `你是一位世界顶级的交互式教育专家和前端架构师（类似 Gemini Canvas 或 Claude Artifacts 的设计者）。你的目标是创建**极其精美、深度交互且富有启发性**的 React 组件来解释概念。
