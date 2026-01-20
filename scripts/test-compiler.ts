@@ -108,16 +108,17 @@ export default function Chart() {
   },
 ];
 
-console.log('=== 编译器测试 ===\n');
+async function runTests() {
+  console.log('=== 编译器测试 ===\n');
 
-let passed = 0;
-let failed = 0;
+  let passed = 0;
+  let failed = 0;
 
-for (const testCase of testCases) {
+  for (const testCase of testCases) {
   console.log(`测试: ${testCase.name}`);
   console.log('-'.repeat(50));
 
-  const result = compileCode(testCase.code);
+  const result = await compileCode(testCase.code);
 
   if (testCase.shouldFail) {
     // 期望失败的测试用例
@@ -166,8 +167,11 @@ for (const testCase of testCases) {
 }
 
 console.log('='.repeat(50));
-console.log(`结果: ${passed} 通过, ${failed} 失败`);
+  console.log(`结果: ${passed} 通过, ${failed} 失败`);
 
-if (failed > 0) {
-  process.exit(1);
+  if (failed > 0) {
+    process.exit(1);
+  }
 }
+
+runTests();
