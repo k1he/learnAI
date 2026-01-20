@@ -10,6 +10,20 @@ export const ALLOWED_LIBRARIES = [
   'lucide-react',
 ];
 
+export const FRIENDLY_ERROR_MESSAGES = [
+  '服务器遇到了量子纠缠 🌀，请稍后重试或换个问法',
+  'AI 陷入了深度思考 🤔，建议换个角度提问',
+  '代码宇宙发生了轻微扰动 ✨，请重新提问试试',
+  '模型进入了薛定谔状态 🐱，刷新后可能会更好',
+  '遇到了时空涟漪 🌊，建议简化问题或重新描述',
+];
+
+export function getRandomFriendlyError(): string {
+  return FRIENDLY_ERROR_MESSAGES[
+    Math.floor(Math.random() * FRIENDLY_ERROR_MESSAGES.length)
+  ];
+}
+
 const LIVELY_PROMPT = `你是一位世界顶级的交互式教育专家和前端架构师（类似 Gemini Canvas 或 Claude Artifacts 的设计者）。你的目标是创建**极其精美、深度交互且富有启发性**的 React 组件来解释概念。
 
 ## 核心设计哲学
@@ -107,6 +121,18 @@ const REFUSAL_PROMPT = `你现在是一个**3岁的可爱宝宝**。
 - **组件库**：必须自行定义简单的 Card 或使用原生 div。
 `;
 
+export const FIX_CODE_PROMPT = `你之前生成的代码有错误，请修复：
+
+原代码：
+\`\`\`tsx
+{originalCode}
+\`\`\`
+
+错误信息：
+{errors}
+
+请只返回修复后的完整代码，不要解释。`;
+
 const CLASSIFIER_PROMPT = `Analyze the user query and determine if it requires a "LIVELY" (educational, basic concept, fun), "PROFESSIONAL" (technical, architecture, advanced research) visualization, or should be "REFUSAL" (philosophical, abstract, subjective, meaning of life, politics, highly complex open-ended questions).
 
 Respond ONLY with the word "LIVELY", "PROFESSIONAL", or "REFUSAL".
@@ -191,4 +217,33 @@ export function validateCode(code: string): { isValid: boolean; error?: string }
 export function getSystemPrompt(style: 'LIVELY' | 'PROFESSIONAL' | 'REFUSAL'): string {
   if (style === 'REFUSAL') return REFUSAL_PROMPT;
   return style === 'LIVELY' ? LIVELY_PROMPT : PROFESSIONAL_PROMPT;
+}
+
+export function buildFixPrompt(originalCode: string, errors: string): string {
+  return FIX_CODE_PROMPT.replace('{originalCode}', originalCode).replace('{errors}', errors);
+}
+
+export async function generateFixedCode(
+  client: OpenAI,
+  originalCode: string,
+  errors: string
+): Promise<string> {
+  const response = await client.chat.completions.create({
+    model: process.env.DEFAULT_MODEL || 'gpt-4o',
+    messages: [
+      {
+        role: 'user',
+        content: buildFixPrompt(originalCode, errors),
+      },
+    ],
+    temperature: 0.1,
+    max_tokens: 8192,
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) {
+    throw new Error('Empty response from LLM');
+  }
+
+  return sanitizeCode(content);
 }

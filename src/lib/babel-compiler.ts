@@ -6,7 +6,6 @@
 
 import { parse } from '@babel/parser';
 import traverse, { NodePath } from '@babel/traverse';
-import generate from '@babel/generator';
 import * as t from '@babel/types';
 import { transformFromAstSync } from '@babel/core';
 
@@ -15,6 +14,14 @@ export interface CompileResult {
   code?: string;
   error?: string;
   unsupportedLibraries?: string[];
+  undefinedVariables?: UndefinedVariable[];
+}
+
+export interface UndefinedVariable {
+  name: string;
+  line: number;
+  column: number;
+  scope?: string;
 }
 
 interface ImportInfo {
@@ -38,6 +45,57 @@ export class BabelCompiler {
     'lucide-react',
   ]);
 
+  // 允许的全局变量（避免未定义变量误报）
+  private static readonly GLOBAL_ALLOWLIST = new Set([
+    'window',
+    'document',
+    'console',
+    'navigator',
+    'location',
+    'history',
+    'localStorage',
+    'sessionStorage',
+    'fetch',
+    'setTimeout',
+    'setInterval',
+    'clearTimeout',
+    'clearInterval',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'React',
+    'ReactDOM',
+    'Fragment',
+    'useState',
+    'useEffect',
+    'useRef',
+    'useMemo',
+    'useCallback',
+    'useContext',
+    'createContext',
+    'Math',
+    'Date',
+    'Array',
+    'Object',
+    'String',
+    'Number',
+    'Boolean',
+    'RegExp',
+    'Set',
+    'Map',
+    'WeakMap',
+    'WeakSet',
+    'Symbol',
+    'BigInt',
+    'JSON',
+    'Intl',
+    'Promise',
+    'Error',
+    'TypeError',
+    'NaN',
+    'Infinity',
+    'undefined',
+  ]);
+
   /**
    * 编译 JSX/TSX 代码为可执行的 JavaScript
    */
@@ -56,13 +114,23 @@ export class BabelCompiler {
         };
       }
 
-      // 3. 转换 AST（处理 import/export）
+      // 3. 检测未定义变量
+      const undefinedVariables = this.detectUndefinedVariables(ast);
+      if (undefinedVariables.length > 0) {
+        return {
+          success: false,
+          error: this.buildUndefinedVariablesError(undefinedVariables),
+          undefinedVariables,
+        };
+      }
+
+      // 4. 转换 AST（处理 import/export）
       this.transformAST(ast);
 
-      // 4. 生成代码
+      // 5. 生成代码
       const generatedCode = this.generateCode(ast);
 
-      // 5. 包装为可执行代码
+      // 6. 包装为可执行代码
       const componentName = this.extractComponentName(code);
       const executableCode = this.wrapCode(generatedCode, componentName);
 
@@ -82,19 +150,111 @@ export class BabelCompiler {
    * 解析代码为 AST
    */
   private parseCode(code: string): t.File {
-    return parse(code, {
-      sourceType: 'module',
-      plugins: [
-        'jsx',
-        'typescript',
-        // 支持现代 JavaScript 特性
-        'classProperties',
-        'decorators-legacy',
-        'objectRestSpread',
-        'optionalChaining',
-        'nullishCoalescingOperator',
-      ],
+    try {
+      return parse(code, {
+        sourceType: 'module',
+        plugins: [
+          'jsx',
+          'typescript',
+          // 支持现代 JavaScript 特性
+          'classProperties',
+          'decorators-legacy',
+          'objectRestSpread',
+          'optionalChaining',
+          'nullishCoalescingOperator',
+        ],
+      });
+    } catch (error) {
+      throw new Error(this.formatBabelParseError(error));
+    }
+  }
+
+  /**
+   * 格式化 Babel 解析错误，提取行号和列号
+   */
+  private formatBabelParseError(error: unknown): string {
+    if (error && typeof error === 'object' && 'loc' in error) {
+      const anyError = error as { loc?: { line?: number; column?: number }; message?: string };
+      const line = anyError.loc?.line;
+      const column = anyError.loc?.column;
+      if (typeof line === 'number' && typeof column === 'number') {
+        const message = anyError.message || 'Parse error';
+        return `Line ${line}, Col ${column + 1}: ${message}`;
+      }
+    }
+    return error instanceof Error ? error.message : 'Unknown parsing error';
+  }
+
+  /**
+   * 检测未定义变量
+   */
+  private detectUndefinedVariables(ast: t.File): UndefinedVariable[] {
+    const undefinedVars: UndefinedVariable[] = [];
+    const seen = new Set<string>();
+
+    const record = (
+      name: string,
+      loc: t.SourceLocation | null | undefined,
+      scopeType?: string
+    ) => {
+      const line = loc?.start.line ?? 0;
+      const column = loc?.start.column ?? 0;
+      const key = `${name}:${line}:${column}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      undefinedVars.push({ name, line, column, scope: scopeType });
+    };
+
+    const isAllowedGlobal = (name: string) => BabelCompiler.GLOBAL_ALLOWLIST.has(name);
+
+    const getJSXRootIdentifier = (
+      node: t.JSXIdentifier | t.JSXMemberExpression
+    ): t.JSXIdentifier | null => {
+      if (t.isJSXIdentifier(node)) return node;
+      if (t.isJSXMemberExpression(node)) return getJSXRootIdentifier(node.object);
+      return null;
+    };
+
+    const checkJSXName = (
+      node: t.JSXIdentifier | t.JSXMemberExpression,
+      scope: NodePath['scope']
+    ) => {
+      const root = getJSXRootIdentifier(node);
+      if (!root) return;
+      const name = root.name;
+      if (!name) return;
+      if (name[0] === name[0].toLowerCase()) return;
+      if (isAllowedGlobal(name)) return;
+      if (scope.hasBinding(name)) return;
+      record(name, root.loc, scope.block.type);
+    };
+
+    traverse(ast, {
+      Identifier(path) {
+        if (!path.isReferencedIdentifier()) return;
+        const name = path.node.name;
+        if (isAllowedGlobal(name)) return;
+        if (path.scope.hasBinding(name)) return;
+        record(name, path.node.loc, path.scope.block.type);
+      },
+      JSXOpeningElement(path) {
+        checkJSXName(path.node.name, path.scope);
+      },
+      JSXClosingElement(path) {
+        checkJSXName(path.node.name, path.scope);
+      },
     });
+
+    return undefinedVars;
+  }
+
+  /**
+   * 构建未定义变量错误消息
+   */
+  private buildUndefinedVariablesError(undefinedVariables: UndefinedVariable[]): string {
+    return undefinedVariables
+      .map((item) => `Line ${item.line}, Col ${item.column + 1}: '${item.name}' is not defined`)
+      .join('\n');
   }
 
   /**

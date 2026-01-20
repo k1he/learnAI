@@ -44,4 +44,12 @@ next-env.d.ts
 playwright-report/
 test-results/
 __tests__/e2e/visual/screenshots/
+
+# Logs (keep .gitkeep files)
+logs/compiled-code/*.js
+logs/llm/*.json
+logs/rework/*.json
+logs/compile-errors/*.json
+logs/runtime-errors/*.json
+
 .codebuddy

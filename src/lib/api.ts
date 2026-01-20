@@ -48,6 +48,12 @@ export async function generateVisualization(
       if (response.status === 400) {
         throw new ApiError(errorData.detail || '输入无效，请检查后重试', 400);
       }
+      if (response.status === 422) {
+        throw new ApiError(
+          errorData.error || '服务器遇到了量子纠缠 🌀，请稍后重试或换个问法',
+          422
+        );
+      }
       if (response.status === 500) {
         throw new ApiError(errorData.detail || '服务器错误，请稍后重试', 500);
       }

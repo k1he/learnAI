@@ -45,7 +45,7 @@ export async function chatGenerate(
 
       if (response.status === 422) {
         throw new ApiError(
-          "代码验证失败：生成的代码包含不允许的库",
+          errorData.error || "服务器遇到了量子纠缠 🌀，请稍后重试或换个问法",
           response.status,
           errorData
         );
