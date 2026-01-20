@@ -44,3 +44,4 @@ next-env.d.ts
 playwright-report/
 test-results/
 __tests__/e2e/visual/screenshots/
+.codebuddy
