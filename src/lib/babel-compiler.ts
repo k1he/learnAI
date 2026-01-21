@@ -216,9 +216,11 @@ export class BabelCompiler {
     };
 
     const checkJSXName = (
-      node: t.JSXIdentifier | t.JSXMemberExpression,
+      node: t.JSXIdentifier | t.JSXMemberExpression | t.JSXNamespacedName,
       scope: NodePath['scope']
     ) => {
+      // JSXNamespacedName (如 xml:lang) 不需要检查变量绑定
+      if (t.isJSXNamespacedName(node)) return;
       const root = getJSXRootIdentifier(node);
       if (!root) return;
       const name = root.name;
