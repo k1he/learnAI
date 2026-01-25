@@ -1,7 +1,7 @@
 """
 Authentication models: User, UserProfile, UserQuota and schemas.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from uuid import uuid4
@@ -37,8 +37,8 @@ class User(Base):
     reset_token: Mapped[Optional[str]] = mapped_column(String(255), index=True)
     reset_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(datetime.UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(datetime.UTC), onupdate=lambda: datetime.now(datetime.UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     profile: Mapped[Optional["UserProfile"]] = relationship(
         "UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"
@@ -57,7 +57,7 @@ class UserProfile(Base):
     avatar_url: Mapped[Optional[str]] = mapped_column(String)
     bio: Mapped[Optional[str]] = mapped_column(String(500))
 
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(datetime.UTC), onupdate=lambda: datetime.now(datetime.UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", back_populates="profile")
 
@@ -70,7 +70,7 @@ class UserQuota(Base):
 
     daily_messages_limit: Mapped[int] = mapped_column(Integer, default=50)
     daily_messages_used: Mapped[int] = mapped_column(Integer, default=0)
-    daily_messages_reset_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(datetime.UTC))
+    daily_messages_reset_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     monthly_messages_limit: Mapped[int] = mapped_column(Integer, default=1000)
     monthly_messages_used: Mapped[int] = mapped_column(Integer, default=0)
@@ -78,11 +78,11 @@ class UserQuota(Base):
 
     daily_tokens_limit: Mapped[int] = mapped_column(Integer, default=50000)
     daily_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
-    daily_tokens_reset_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(datetime.UTC))
+    daily_tokens_reset_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     vip_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(datetime.UTC), onupdate=lambda: datetime.now(datetime.UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", back_populates="quota")
 
@@ -166,7 +166,7 @@ class UserResponse(BaseModel):
 
         quota = None
         if user.quota:
-            now = datetime.now(datetime.UTC)
+            now = datetime.now(timezone.utc)
             is_vip = user.role == UserRole.VIP and (user.quota.vip_expires_at is None or user.quota.vip_expires_at > now)
             quota = QuotaResponse(
                 daily_messages_limit=user.quota.daily_messages_limit,
