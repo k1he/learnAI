@@ -10,7 +10,8 @@ from app.core.config import settings
 from app.core.security import Security
 from app.models.auth import (
     User, UserProfile, UserQuota, UserRole,
-    RegisterRequest, LoginRequest, UserResponse, LoginResponse
+    RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest,
+    UserResponse, LoginResponse
 )
 from app.services.email_service import EmailService
 
@@ -132,4 +133,92 @@ async def login(
             "expires_in": settings.jwt_expiry_days * 24 * 60 * 60,  # Convert to seconds
             "user": UserResponse.from_db_model(user).model_dump()
         }
+    }
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db = Depends(get_db)
+):
+    """
+    Request password reset email.
+
+    - Sends reset token to user's email
+    - Always returns 200 to avoid email enumeration
+    - Token expires after configured hours
+    """
+    result = await db.execute(
+        select(User).where(User.email == request.email)
+    )
+    user = result.scalar_one_or_none()
+
+    if user:
+        # Generate reset token
+        reset_token = Security.generate_reset_token()
+        reset_expires = datetime.now(timezone.utc) + timedelta(
+            hours=settings.password_reset_expire_hours
+        )
+
+        user.reset_token = reset_token
+        user.reset_token_expires_at = reset_expires
+        await db.commit()
+
+        # Send reset email
+        await EmailService.send_password_reset_email(
+            email=user.email,
+            token=reset_token
+        )
+
+    # Always return success to avoid email enumeration
+    return {
+        "success": True,
+        "message": "If the email exists, a password reset link has been sent"
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: ResetPasswordRequest,
+    db = Depends(get_db)
+):
+    """
+    Reset password with valid token.
+
+    - Token must be valid and not expired
+    - Password must meet requirements
+    - Invalidates reset token after use
+    """
+    result = await db.execute(
+        select(User).where(User.reset_token == request.token)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reset token"
+        )
+
+    # Check if token expired
+    if (
+        user.reset_token_expires_at is None or
+        user.reset_token_expires_at < datetime.now(timezone.utc)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token expired"
+        )
+
+    # Update password
+    user.password_hash = Security.get_password_hash(request.new_password)
+    user.reset_token = None
+    user.reset_token_expires_at = None
+
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "success": True,
+        "message": "Password reset successfully"
     }

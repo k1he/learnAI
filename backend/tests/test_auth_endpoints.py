@@ -203,3 +203,131 @@ async def test_login_vip_user(async_client: AsyncClient, db_session: AsyncSessio
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["user"]["role"] == UserRole.VIP
+
+
+# Password reset tests
+
+@pytest.mark.asyncio
+async def test_forgot_password_success(async_client: AsyncClient, db_session):
+    """Test forgot password request for existing user"""
+    from sqlalchemy import select
+    user = User(
+        id="reset_user",
+        email="reset@example.com",
+        password_hash=Security.get_password_hash("OldPassword123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "reset@example.com"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "message" in data
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_nonexistent_user(async_client: AsyncClient):
+    """Test forgot password for non-existent user"""
+    response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "nonexistent@example.com"}
+    )
+
+    # For security, still return 200 to avoid email enumeration
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_reset_password_success(async_client: AsyncClient, db_session):
+    """Test successful password reset with valid token"""
+    from sqlalchemy import select
+    from datetime import datetime, timedelta, timezone
+
+    # Create user
+    user = User(
+        id="reset_token_user",
+        email="reset_token@example.com",
+        password_hash=Security.get_password_hash("OldPassword123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    # Set reset token (simulating forgot-password flow)
+    reset_token = Security.generate_reset_token()
+    reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    user.reset_token = reset_token
+    user.reset_token_expires_at = reset_expires
+    await db_session.commit()
+
+    # Reset password
+    response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "token": reset_token,
+            "new_password": "NewPassword456!"
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+
+    # Verify password changed
+    await db_session.refresh(user)
+    assert not Security.verify_password("OldPassword123!", user.password_hash)
+    assert Security.verify_password("NewPassword456!", user.password_hash)
+
+
+@pytest.mark.asyncio
+async def test_reset_password_invalid_token(async_client: AsyncClient):
+    """Test reset password with invalid token"""
+    response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "token": "invalid-token-xyz123",
+            "new_password": "NewPassword456!"
+        }
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_password_expired_token(async_client: AsyncClient, db_session):
+    """Test reset password with expired token"""
+    from sqlalchemy import select
+    from datetime import datetime, timedelta, timezone
+
+    # Create user with expired token
+    user = User(
+        id="expired_token_user",
+        email="expired@example.com",
+        password_hash=Security.get_password_hash("OldPassword123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    reset_token = Security.generate_reset_token()
+    reset_expires = datetime.now(timezone.utc) - timedelta(hours=1)  # Expired
+    user.reset_token = reset_token
+    user.reset_token_expires_at = reset_expires
+    db_session.add(user)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "token": reset_token,
+            "new_password": "NewPassword456!"
+        }
+    )
+
+    assert response.status_code == 400
