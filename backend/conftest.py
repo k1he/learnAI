@@ -59,3 +59,41 @@ async def async_client(db_session):
         yield client
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def admin_user(db_session):
+    """Create an admin user for testing."""
+    from app.models.auth import User, UserRole
+    from app.core.security import Security
+
+    user = User(
+        id="admin_123",
+        email="admin@example.com",
+        password_hash=Security.get_password_hash("AdminPass123!"),
+        is_verified=True,
+        role=UserRole.ADMIN
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def regular_user(db_session):
+    """Create a regular user for testing."""
+    from app.models.auth import User, UserRole
+    from app.core.security import Security
+
+    user = User(
+        id="user_123",
+        email="user@example.com",
+        password_hash=Security.get_password_hash("UserPass123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
