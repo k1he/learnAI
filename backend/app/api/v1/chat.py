@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, Annotated
+from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.response import ErrorResponse, SuccessResponse
+from app.db.session import get_db
+from app.models.auth import User, UserQuota
+from app.dependencies.auth import get_current_user
 from app.models.chat import AssistantMessage, ChatRequest, ChatResponse, UsageInfo
 from app.services import openai_client
 from app.services.code_validator import ValidationResult, sanitize_code, validate_code
@@ -70,11 +75,77 @@ def _parse_llm_json(raw: str) -> tuple[str, str | None]:
     return explanation, code
 
 
+async def check_chat_quota(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    """Check if user has available quota for chat."""
+    # Ensure quota exists
+    if not current_user.quota:
+        # Create quota if not exists
+        quota = UserQuota(
+            user_id=current_user.id,
+            daily_messages_limit=settings.daily_messages_limit,
+            monthly_messages_limit=settings.monthly_messages_limit,
+            daily_tokens_limit=settings.daily_tokens_limit
+        )
+        db.add(quota)
+        await db.commit()
+        await db.refresh(current_user)
+
+    now = datetime.now(timezone.utc)
+
+    # Check if daily quota has reset
+    if current_user.quota.daily_messages_reset_at and \
+       current_user.quota.daily_messages_reset_at <= now:
+        current_user.quota.daily_messages_used = 0
+        current_user.quota.daily_tokens_used = 0
+        current_user.quota.daily_messages_reset_at = now + timedelta(days=1)
+
+    # Check if monthly quota has reset
+    if current_user.quota.monthly_messages_reset_at and \
+       current_user.quota.monthly_messages_reset_at <= now:
+        current_user.quota.monthly_messages_used = 0
+        current_user.quota.monthly_messages_reset_at = now + timedelta(days=30)
+
+    # Check daily message quota
+    if current_user.quota.daily_messages_used >= current_user.quota.daily_messages_limit:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Daily message quota exceeded"
+        )
+
+    # Check monthly message quota
+    if current_user.quota.monthly_messages_used >= current_user.quota.monthly_messages_limit:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Monthly message quota exceeded"
+        )
+
+    return current_user
+
+
 @router.post("/generate")
-async def generate_chat(request: ChatRequest):
-    """Generate chat completion with JSX code."""
+async def generate_chat(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(check_chat_quota)
+):
+    """
+    Generate chat completion with JSX code.
+
+    - Requires authentication
+    - Enforces quota limits
+    - Tracks usage per user
+    """
     model = request.model or settings.default_model
     prompt_builder = PromptBuilder()
+
+    # Increment usage at the start
+    if current_user.quota:
+        current_user.quota.daily_messages_used += 1
+        current_user.quota.monthly_messages_used += 1
+        await db.commit()
 
     # Get last user message for classification
     last_user_message = ""

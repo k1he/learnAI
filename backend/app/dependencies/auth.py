@@ -38,8 +38,11 @@ async def get_current_user(
         raise credentials_exception
 
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     result = await db.execute(
-        select(User).where(User.id == user_id)
+        select(User)
+        .options(selectinload(User.quota), selectinload(User.profile))
+        .where(User.id == user_id)
     )
     user = result.scalar_one_or_none()
 

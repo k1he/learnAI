@@ -1,10 +1,11 @@
 """
 Authentication models: User, UserProfile, UserQuota and schemas.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
-from typing import Optional
+from typing import Annotated, Optional
 from uuid import uuid4
+from fastapi import Depends
 from sqlalchemy import String, Boolean, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pydantic import BaseModel, EmailStr, Field
@@ -70,7 +71,10 @@ class UserQuota(Base):
 
     daily_messages_limit: Mapped[int] = mapped_column(Integer, default=50)
     daily_messages_used: Mapped[int] = mapped_column(Integer, default=0)
-    daily_messages_reset_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    daily_messages_reset_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc) + timedelta(days=1)
+    )
 
     monthly_messages_limit: Mapped[int] = mapped_column(Integer, default=1000)
     monthly_messages_used: Mapped[int] = mapped_column(Integer, default=0)
@@ -78,7 +82,10 @@ class UserQuota(Base):
 
     daily_tokens_limit: Mapped[int] = mapped_column(Integer, default=50000)
     daily_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
-    daily_tokens_reset_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    daily_tokens_reset_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc) + timedelta(days=1)
+    )
 
     vip_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
@@ -201,3 +208,11 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserResponse
+
+
+# === Dependency Type Aliases ===
+
+from app.dependencies.auth import get_current_user, require_admin
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+AdminUser = Annotated[User, Depends(require_admin)]
