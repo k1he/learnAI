@@ -1,6 +1,7 @@
 """
 Authentication API routes: register, login, verify, reset password.
 """
+from typing import Annotated
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
@@ -11,9 +12,13 @@ from app.core.security import Security
 from app.models.auth import (
     User, UserProfile, UserQuota, UserRole,
     RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest,
-    UserResponse, LoginResponse
+    UpdateProfileRequest, UserResponse, LoginResponse, QuotaResponse
 )
 from app.services.email_service import EmailService
+from app.dependencies.auth import get_current_user
+
+# Type aliases for dependency injection
+CurrentUser = Annotated[User, Depends(get_current_user)]
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -221,4 +226,159 @@ async def reset_password(
     return {
         "success": True,
         "message": "Password reset successfully"
+    }
+
+
+@router.put("/profile")
+async def update_profile(
+    request: UpdateProfileRequest,
+    current_user: CurrentUser,
+    db = Depends(get_db)
+):
+    """
+    Update user profile information.
+
+    - Update nickname, avatar URL, and bio
+    - Partial updates allowed (omit fields to keep current values)
+    - Requires authentication
+    """
+    from sqlalchemy.orm import selectinload
+
+    # Reload user with profile in current db session
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.id == current_user.id)
+    )
+    user = result.scalar_one()
+
+    # Get or create profile
+    if not user.profile:
+        profile = UserProfile(user_id=user.id, nickname=user.email.split("@")[0])
+        db.add(profile)
+        await db.flush()  # Flush to get the profile ID
+        # Manually set the relationship
+        user.profile = profile
+
+    # Update fields if provided
+    if request.nickname is not None:
+        user.profile.nickname = request.nickname
+    if request.avatar_url is not None:
+        user.profile.avatar_url = request.avatar_url
+    if request.bio is not None:
+        user.profile.bio = request.bio
+
+    await db.commit()
+
+    # Get final values for response
+    result_nickname = user.profile.nickname
+    result_avatar = user.profile.avatar_url
+    result_bio = user.profile.bio
+
+    return {
+        "success": True,
+        "data": {"profile": {
+            "nickname": result_nickname,
+            "avatar_url": result_avatar,
+            "bio": result_bio
+        }}
+    }
+
+
+@router.get("/quota")
+async def get_quota(
+    current_user: CurrentUser,
+    db = Depends(get_db)
+):
+    """
+    Get current user's quota information.
+
+    - Shows message and token usage
+    - Displays remaining quota
+    - Shows VIP status and expiration
+    """
+    from sqlalchemy.orm import selectinload
+
+    # Reload user with quota in current db session
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.quota))
+        .where(User.id == current_user.id)
+    )
+    user = result.scalar_one()
+
+    if not user.quota:
+        # Create quota if not exists
+        quota = UserQuota(
+            user_id=user.id,
+            daily_messages_limit=settings.daily_messages_limit,
+            monthly_messages_limit=settings.monthly_messages_limit,
+            daily_tokens_limit=settings.daily_tokens_limit
+        )
+        db.add(quota)
+        await db.flush()
+        # Manually set the relationship
+        user.quota = quota
+
+    now = datetime.now(timezone.utc)
+    is_vip = (
+        user.role == UserRole.VIP and
+        (user.quota.vip_expires_at is None or
+         user.quota.vip_expires_at > now)
+    )
+
+    # Get values before commit for response
+    quota_data = {
+        "daily_messages_limit": user.quota.daily_messages_limit,
+        "daily_messages_used": user.quota.daily_messages_used,
+        "daily_messages_remaining": max(
+            0,
+            user.quota.daily_messages_limit - user.quota.daily_messages_used
+        ),
+        "daily_messages_reset_at": user.quota.daily_messages_reset_at,
+        "monthly_messages_limit": user.quota.monthly_messages_limit,
+        "monthly_messages_used": user.quota.monthly_messages_used,
+        "monthly_messages_remaining": max(
+            0,
+            user.quota.monthly_messages_limit - user.quota.monthly_messages_used
+        ),
+        "monthly_messages_reset_at": user.quota.monthly_messages_reset_at,
+        "daily_tokens_limit": user.quota.daily_tokens_limit,
+        "daily_tokens_used": user.quota.daily_tokens_used,
+        "daily_tokens_remaining": max(
+            0,
+            user.quota.daily_tokens_limit - user.quota.daily_tokens_used
+        ),
+        "daily_tokens_reset_at": user.quota.daily_tokens_reset_at,
+        "is_vip": is_vip,
+        "vip_expires_at": user.quota.vip_expires_at
+    }
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "data": quota_data
+    }
+
+
+@router.delete("/account")
+async def delete_account(
+    current_user: CurrentUser,
+    db = Depends(get_db)
+):
+    """
+    Delete user account and all associated data.
+
+    - This action is irreversible
+    - Deletes user profile and quota
+    - Requires authentication
+    """
+    # SQLAlchemy cascade will delete profile and quota
+    await db.delete(current_user)
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Account deleted successfully"
     }

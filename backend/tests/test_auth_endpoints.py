@@ -331,3 +331,190 @@ async def test_reset_password_expired_token(async_client: AsyncClient, db_sessio
     )
 
     assert response.status_code == 400
+
+
+# Profile tests
+
+@pytest.mark.asyncio
+async def test_update_profile_success(async_client: AsyncClient, db_session):
+    """Test updating user profile"""
+    from sqlalchemy import select
+
+    user = User(
+        id="profile_user",
+        email="profile@example.com",
+        password_hash=Security.get_password_hash("Password123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    token = Security.create_access_token({"sub": user.id})
+
+    response = await async_client.put(
+        "/api/v1/auth/profile",
+        json={
+            "nickname": "New Nickname",
+            "bio": "Updated bio",
+            "avatar_url": "https://example.com/avatar.png"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["profile"]["nickname"] == "New Nickname"
+    assert data["data"]["profile"]["bio"] == "Updated bio"
+    assert data["data"]["profile"]["avatar_url"] == "https://example.com/avatar.png"
+
+
+@pytest.mark.asyncio
+async def test_update_profile_partial(async_client: AsyncClient, db_session):
+    """Test partial profile update"""
+    from sqlalchemy import select
+
+    user = User(
+        id="partial_user",
+        email="partial@example.com",
+        password_hash=Security.get_password_hash("Password123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    token = Security.create_access_token({"sub": user.id})
+
+    response = await async_client.put(
+        "/api/v1/auth/profile",
+        json={"nickname": "Only Nickname"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["data"]["profile"]["nickname"] == "Only Nickname"
+
+
+@pytest.mark.asyncio
+async def test_update_profile_unauthenticated(async_client: AsyncClient):
+    """Test updating profile without authentication"""
+    response = await async_client.put(
+        "/api/v1/auth/profile",
+        json={"nickname": "Hacker"}
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_quota(async_client: AsyncClient, db_session):
+    """Test getting user quota information"""
+    from app.models.auth import UserQuota
+    from datetime import datetime, timezone
+
+    user = User(
+        id="quota_user",
+        email="quota@example.com",
+        password_hash=Security.get_password_hash("Password123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    quota = UserQuota(
+        user_id=user.id,
+        daily_messages_limit=100,
+        daily_messages_used=25,
+        monthly_messages_limit=1000,
+        monthly_messages_used=500,
+        daily_tokens_limit=50000,
+        daily_tokens_used=10000
+    )
+    db_session.add(quota)
+    await db_session.commit()
+
+    token = Security.create_access_token({"sub": user.id})
+
+    response = await async_client.get(
+        "/api/v1/auth/quota",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["daily_messages_limit"] == 100
+    assert data["data"]["daily_messages_used"] == 25
+    assert data["data"]["daily_messages_remaining"] == 75
+    assert data["data"]["is_vip"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_vip_quota(async_client: AsyncClient, db_session):
+    """Test getting VIP user quota"""
+    from datetime import datetime, timedelta, timezone
+    from app.models.auth import UserQuota
+
+    user = User(
+        id="vip_quota_user",
+        email="vip_quota@example.com",
+        password_hash=Security.get_password_hash("Password123!"),
+        is_verified=True,
+        role=UserRole.VIP
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    quota = UserQuota(
+        user_id=user.id,
+        daily_messages_limit=500,  # VIP gets higher limits
+        daily_messages_used=100,
+        monthly_messages_limit=10000,
+        monthly_messages_used=1000,
+        daily_tokens_limit=500000,
+        daily_tokens_used=50000,
+        vip_expires_at=datetime.now(timezone.utc) + timedelta(days=30)
+    )
+    db_session.add(quota)
+    await db_session.commit()
+
+    token = Security.create_access_token({"sub": user.id})
+
+    response = await async_client.get(
+        "/api/v1/auth/quota",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["data"]["daily_messages_limit"] == 500
+    assert data["data"]["is_vip"] is True
+    assert data["data"]["vip_expires_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_update_profile_invalid_nickname_length(async_client: AsyncClient, db_session):
+    """Test profile update with nickname exceeding max length"""
+    user = User(
+        id="long_user",
+        email="long@example.com",
+        password_hash=Security.get_password_hash("Password123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    token = Security.create_access_token({"sub": user.id})
+
+    response = await async_client.put(
+        "/api/v1/auth/profile",
+        json={"nickname": "A" * 101},  # Exceeds 100 char limit
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 422
