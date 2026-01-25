@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.security import Security
 from app.models.auth import (
     User, UserProfile, UserQuota, UserRole,
-    RegisterRequest, UserResponse
+    RegisterRequest, LoginRequest, UserResponse, LoginResponse
 )
 from app.services.email_service import EmailService
 
@@ -87,4 +87,49 @@ async def register(
     return {
         "success": True,
         "data": UserResponse.from_db_model(user).model_dump()
+    }
+
+
+@router.post("/login")
+async def login(
+    request: LoginRequest,
+    db = Depends(get_db)
+):
+    """
+    Authenticate user and return JWT token.
+
+    - Validates email and password
+    - Returns access token with user info
+    - Email verification recommended but not enforced
+    """
+    from sqlalchemy.orm import selectinload
+
+    # Find user by email with profile and quota loaded
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.profile), selectinload(User.quota))
+        .where(User.email == request.email)
+    )
+    user = result.scalar_one_or_none()
+
+    # Verify password
+    if not user or not Security.verify_password(request.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+
+    # Create access token
+    access_token = Security.create_access_token(
+        data={"sub": user.id, "email": user.email}
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": settings.jwt_expiry_days * 24 * 60 * 60,  # Convert to seconds
+            "user": UserResponse.from_db_model(user).model_dump()
+        }
     }

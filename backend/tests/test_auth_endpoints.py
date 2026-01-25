@@ -1,8 +1,10 @@
 """Test authentication endpoints."""
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import UserRole
+from app.models.auth import UserRole, User
+from app.core.security import Security
 
 
 @pytest.mark.asyncio
@@ -76,3 +78,128 @@ async def test_register_invalid_email(async_client: AsyncClient):
     )
 
     assert response.status_code == 422
+
+
+# Login tests
+
+@pytest.mark.asyncio
+async def test_login_success(async_client: AsyncClient, db_session: AsyncSession):
+    """Test successful login"""
+    from sqlalchemy import select
+    user = User(
+        id="login_user",
+        email="login@example.com",
+        password_hash=Security.get_password_hash("CorrectPassword123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "login@example.com",
+            "password": "CorrectPassword123!"
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "access_token" in data["data"]
+    assert data["data"]["token_type"] == "bearer"
+    assert "expires_in" in data["data"]
+    assert data["data"]["user"]["email"] == "login@example.com"
+
+
+@pytest.mark.asyncio
+async def test_login_wrong_password(async_client: AsyncClient, db_session: AsyncSession):
+    """Test login with wrong password"""
+    from sqlalchemy import select
+    user = User(
+        id="wrong_pwd_user",
+        email="wrong@example.com",
+        password_hash=Security.get_password_hash("CorrectPassword123!"),
+        is_verified=True,
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "wrong@example.com",
+            "password": "WrongPassword"
+        }
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_login_user_not_found(async_client: AsyncClient):
+    """Test login with non-existent user"""
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "nonexistent@example.com",
+            "password": "SomePassword123!"
+        }
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_login_unverified_user(async_client: AsyncClient, db_session: AsyncSession):
+    """Test login with unverified user"""
+    from sqlalchemy import select
+    user = User(
+        id="unverified_user",
+        email="unverified@example.com",
+        password_hash=Security.get_password_hash("Password123!"),
+        is_verified=False,  # Not verified
+        role=UserRole.USER
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "unverified@example.com",
+            "password": "Password123!"
+        }
+    )
+
+    # Should still allow login but might have restrictions
+    assert response.status_code in [200, 403]
+
+
+@pytest.mark.asyncio
+async def test_login_vip_user(async_client: AsyncClient, db_session: AsyncSession):
+    """Test login with VIP user"""
+    from sqlalchemy import select
+    user = User(
+        id="vip_login_user",
+        email="vip_login@example.com",
+        password_hash=Security.get_password_hash("VIPPassword123!"),
+        is_verified=True,
+        role=UserRole.VIP
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "vip_login@example.com",
+            "password": "VIPPassword123!"
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["data"]["user"]["role"] == UserRole.VIP
